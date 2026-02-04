@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Metrónomo — PWA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0ea5e9" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Metrónomo" />
+  <link rel="apple-touch-icon" href="icons/icon-1024.png" sizes="1024x1024" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" sizes="180x180" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <style>
+    :root{
+      --bg:#0b1220; --card:#121a2a; --text:#e6f0ff; --muted:#9fb3c8; --accent:#0ea5e9;
+      --good:#10b981; --warn:#f59e0b; --bad:#ef4444; --led-on:#34d399; --led-off:#1f2a44;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica Neue,Arial;background:linear-gradient(180deg,#0b1220,#0a0f1a);color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    header{padding:18px 16px 4px;text-align:center}
+    header h1{margin:0 0 6px;font-size:1.2rem;font-weight:800}
+    header p{margin:0;color:var(--muted);font-size:.92rem}
+    .container{max-width:840px;margin:0 auto;padding:12px 16px 24px}
+    .card{background:linear-gradient(180deg,#121a2a 0%,#0f1726 100%);border:1px solid #1d2a40;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 6px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)}
+
+    .grid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+    @media (max-width:720px){.grid{grid-template-columns:1fr}}
+
+    .display{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .bpm-box{flex:1;background:#0c1424;border:1px solid #1a2842;border-radius:12px;padding:14px;text-align:center}
+    .bpm{font-weight:900;font-size:2.6rem;letter-spacing:1px}
+    .small{color:var(--muted);font-size:.9rem}
+
+    .controls{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+    @media (max-width:560px){.controls{grid-template-columns:repeat(3,1fr)}}
+
+    label{display:block;color:var(--muted);font-size:.85rem;margin:0 0 6px}
+    select,input[type="range"],input[type="number"]{width:100%;appearance:none;background:#0c1526;border:1px solid #21304a;color:var(--text);padding:10px 12px;border-radius:10px;outline:none;font-size:.98rem}
+
+    .btn{appearance:none;border:none;background:linear-gradient(180deg,#0ea5e9,#0284c7);color:#fff;padding:12px 14px;border-radius:10px;font-weight:800;font-size:1rem;letter-spacing:.3px;box-shadow:0 8px 20px rgba(2,132,199,.35);cursor:pointer;transition:transform .06s ease,filter .2s ease;-webkit-tap-highlight-color:transparent}
+    .btn.secondary{background:#17223a;border:1px solid #233352;box-shadow:none}
+    .btn:active{transform:translateY(1px) scale(.995)}
+
+    .bpm-ctrl{display:flex;gap:8px;align-items:center;justify-content:center}
+    .bpm-ctrl .btn{min-width:44px}
+
+    .leds{display:flex;gap:6px;justify-content:center;margin-top:8px}
+    .led{width:16px;height:16px;border-radius:50%;background:var(--led-off);border:1px solid #223350;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+    .led.active{background:var(--led-on);box-shadow:0 0 16px rgba(52,211,153,.6)}
+
+    .accent-editor{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+    .accent{width:36px;height:36px;border-radius:10px;border:1px solid #263655;background:#0c1526;color:#e5edff;display:grid;place-items:center;font-weight:800;cursor:pointer}
+    .accent[data-level="2"]{background:#11331f;border-color:#1d5b35}
+    .accent[data-level="0"]{background:#2a1a1a;border-color:#5b1d1d;color:#ffb4b4}
+    .legend{color:var(--muted);font-size:.85rem;margin-top:4px}
+
+    .pendulum{position:relative;height:120px;margin-top:8px;background:linear-gradient(180deg,#0c1424,#0a1120);border:1px solid #1a2842;border-radius:12px;overflow:hidden}
+    .bar{position:absolute;left:50%;top:8px;bottom:8px;width:3px;background:#223350}
+    .arm{position:absolute;left:50%;width:3px;height:90px;background:linear-gradient(180deg,#e11d48,#ef4444);transform-origin:bottom center;bottom:12px;filter:drop-shadow(0 0 8px rgba(239,68,68,.5))}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Metrónomo digital (PWA)</h1>
+    <p>Funciona en iPhone. Instálalo en pantalla de inicio (icono 1024). Audio local, sin internet tras la primera carga.</p>
+  </header>
+
+  <div class="container">
+    <div class="card display">
+      <div class="bpm-box">
+        <div class="small">BPM</div>
+        <div id="bpmDisplay" class="bpm">120</div>
+        <div class="bpm-ctrl" style="margin-top:8px;">
+          <button class="btn secondary" id="bpmMinus10">-10</button>
+          <button class="btn secondary" id="bpmMinus1">-1</button>
+          <input id="bpmInput" type="number" min="20" max="300" value="120" style="max-width:110px;text-align:center" />
+          <button class="btn secondary" id="bpmPlus1">+1</button>
+          <button class="btn secondary" id="bpmPlus10">+10</button>
+        </div>
+      </div>
+      <div style="flex:1">
+        <div class="pendulum">
+          <div class="bar"></div>
+          <div id="arm" class="arm" style="transform:translateX(-50%) rotate(-25deg)"></div>
+        </div>
+        <div class="leds" id="leds"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <div>
+          <label>Compás (tiempos por compás)</label>
+          <select id="beats">
+            <option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
+          </select>
+        </div>
+        <div>
+          <label>Subdivisión</label>
+          <select id="subdiv">
+            <option value="1">Negras (x1)</option>
+            <option value="2">Corcheas (x2)</option>
+            <option value="3">Tresillos (x3)</option>
+            <option value="4" selected>Semicorcheas (x4)</option>
+            <option value="6">Sextillos (x6)</option>
+            <option value="8">Fusas (x8)</option>
+          </select>
+        </div>
+        <div>
+          <label>Sonido</label>
+          <select id="voice">
+            <option value="classic">Clásico</option>
+            <option value="beep">Beep</option>
+            <option value="clave">Clave</option>
+          </select>
+        </div>
+        <div>
+          <label>Volumen</label>
+          <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" />
+        </div>
+        <div>
+          <label>Tap Tempo</label>
+          <button id="tap" class="btn" style="width:100%">TAP</button>
+        </div>
+        <div>
+          <label>Reproducción</label>
+          <button id="startStop" class="btn" style="width:100%">Iniciar</button>
+        </div>
+      </div>
+
+      <div class="accent-editor" id="accentEditor"></div>
+      <div class="legend">Toca cada celda para alternar: <b>A</b> (acentuado) → <b>•</b> (normal) → <b>–</b> (silencio).</div>
+    </div>
+
+    <div class="card">
+      <p class="small">
+        Consejos para iPhone: 1) Primera vez abre vía <b>HTTPS</b> y presiona <b>Iniciar</b> para conceder micrófono/sonido; 2) Usa <b>Compartir → Agregar a pantalla de inicio</b> para instalar como app; 3) Luego funciona <b>sin internet</b> (gracias al Service Worker).
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // ====== Estado y utilidades ======
+    let audioCtx, masterGain, schedulerTimer, isRunning=false;
+    let bpm = 120;
+    let beatsPerBar = 4; // tiempos
+    let subdiv = 4;      // subdivisiones por tiempo
+    let nextNoteTime = 0; // reloj de AudioContext (s)
+    let noteIndex = 0;    // índice de subdivisión total
+    let accentPattern = []; // 0=silencio, 1=normal, 2=acentuado (por tiempo, no por subdiv)
+    let voice = 'classic';
+    let tapTimes = [];
+
+    const elBpmInput = document.getElementById('bpmInput');
+    const elBpmDisplay = document.getElementById('bpmDisplay');
+    const elBeats = document.getElementById('beats');
+    const elSubdiv = document.getElementById('subdiv');
+    const elStartStop = document.getElementById('startStop');
+    const elTap = document.getElementById('tap');
+    const elVolume = document.getElementById('volume');
+    const elVoice = document.getElementById('voice');
+    const elAccentEditor = document.getElementById('accentEditor');
+    const elLeds = document.getElementById('leds');
+    const elArm = document.getElementById('arm');
+
+    // Persistencia simple
+    function saveState(){
+      const state = { bpm, beatsPerBar, subdiv, voice, volume: masterGain? masterGain.gain.value : Number(elVolume.value), accentPattern };
+      localStorage.setItem('metronome-state', JSON.stringify(state));
+    }
+    function loadState(){
+      try{
+        const s = JSON.parse(localStorage.getItem('metronome-state'));
+        if (!s) return;
+        bpm = clamp(s.bpm||120, 20, 300);
+        beatsPerBar = clamp(s.beatsPerBar||4, 1, 12);
+        subdiv = clamp(s.subdiv||4, 1, 8);
+        voice = s.voice||'classic';
+        accentPattern = Array.isArray(s.accentPattern)? s.accentPattern.slice(0, beatsPerBar) : [];
+        elVolume.value = s.volume!=null ? s.volume : 0.8;
+        applyStateToUI();
+      }catch(e){}
+    }
+
+    function clamp(v, a, b){ return Math.min(b, Math.max(a, v)); }
+    function updateBpm(v){ bpm = clamp(Number(v)||120, 20, 300); elBpmInput.value = bpm; elBpmDisplay.textContent = bpm; saveState(); }
+
+    // ====== Inicialización de Audio ======
+    function initAudio(){
+      if (audioCtx) return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC({ latencyHint: 'interactive' });
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = Number(elVolume.value);
+      masterGain.connect(audioCtx.destination);
+    }
+
+    // ====== Programador de notas (lookahead) ======
+    const scheduleAheadTime = 0.15; // s
+    const lookahead = 25; // ms
+
+    function nextSubdiv(){
+      const secondsPerBeat = 60.0 / bpm;
+      const spSub = secondsPerBeat / subdiv;
+      nextNoteTime += spSub;
+      noteIndex++;
+    }
+
+    function currentBeat(){
+      // índice de tiempo actual (0..beatsPerBar-1)
+      const subPerBar = beatsPerBar * subdiv;
+      return Math.floor((noteIndex % subPerBar) / subdiv);
+    }
+
+    function scheduler(){
+      while (audioCtx.currentTime + scheduleAheadTime >= nextNoteTime){
+        scheduleTick(nextNoteTime);
+        nextSubdiv();
+      }
+    }
+
+    function start(){
+      initAudio();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      isRunning = true;
+      elStartStop.textContent = 'Detener';
+      nextNoteTime = audioCtx.currentTime + 0.06; // pequeño margen
+      schedulerTimer = setInterval(scheduler, lookahead);
+      animatePendulum();
+    }
+
+    function stop(){
+      isRunning = false;
+      elStartStop.textContent = 'Iniciar';
+      if (schedulerTimer) clearInterval(schedulerTimer);
+    }
+
+    // ====== Sonidos ======
+    function playClick(time, level){
+      // level: 0=silencio, 1=normal, 2=acentuado
+      if (!audioCtx || level===0) return;
+      const g = audioCtx.createGain();
+      g.gain.value = (level===2? 1.0 : 0.55);
+      g.connect(masterGain);
+
+      if (voice === 'beep'){
+        const osc = audioCtx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(level===2? 1500:1000, time);
+        const env = audioCtx.createGain();
+        env.gain.setValueAtTime(0, time);
+        env.gain.linearRampToValueAtTime(1, time+0.002);
+        env.gain.exponentialRampToValueAtTime(0.001, time+0.06);
+        osc.connect(env).connect(g);
+        osc.start(time); osc.stop(time+0.08);
+      } else if (voice === 'clave'){
+        // Ruido breve filtrado (sonido madera)
+        const bufferSize = 4096;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (level===2? 1.0 : 0.7);
+        const noise = audioCtx.createBufferSource(); noise.buffer = noiseBuffer;
+        const bp = audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.setValueAtTime(level===2? 2000:1600, time); bp.Q.value=8;
+        const env = audioCtx.createGain();
+        env.gain.setValueAtTime(0, time);
+        env.gain.linearRampToValueAtTime(1, time+0.002);
+        env.gain.exponentialRampToValueAtTime(0.001, time+0.06);
+        noise.connect(bp).connect(env).connect(g);
+        noise.start(time); noise.stop(time+0.08);
+      } else {
+        // Clásico: ticks seno/triángulo
+        const osc = audioCtx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(level===2? 1800:1200, time);
+        const env = audioCtx.createGain();
+        env.gain.setValueAtTime(0, time);
+        env.gain.linearRampToValueAtTime(1, time+0.002);
+        env.gain.exponentialRampToValueAtTime(0.001, time+0.06);
+        osc.connect(env).connect(g);
+        osc.start(time); osc.stop(time+0.08);
+      }
+
+      // Haptics si está disponible
+      if (navigator.vibrate){
+        try{ navigator.vibrate(level===2? 12:6); }catch(e){}
+      }
+    }
+
+    function scheduleTick(time){
+      const beat = currentBeat();
+      const isDownbeat = (beat===0) && (noteIndex % subdiv === 0);
+      const isOnBeat = (noteIndex % subdiv === 0);
+      const level = isOnBeat ? (accentPattern[beat] || 1) : 1; // subdivisiones sin editar: nivel normal
+      playClick(time, level);
+      scheduleVisual(time, beat, isOnBeat);
+    }
+
+    // ====== Visual (LEDs + péndulo) ======
+    function buildLeds(){
+      elLeds.innerHTML = '';
+      for (let i=0;i<beatsPerBar;i++){
+        const d = document.createElement('div');
+        d.className = 'led';
+        elLeds.appendChild(d);
+      }
+    }
+    function scheduleVisual(time, beat, isOnBeat){
+      const when = Math.max(0, time - audioCtx.currentTime);
+      setTimeout(()=>{
+        if (!isOnBeat) return;
+        [...elLeds.children].forEach((c,i)=> c.classList.toggle('active', i===beat));
+      }, when*1000);
+    }
+
+    function animatePendulum(){
+      if (!isRunning) { elArm.style.transform = 'translateX(-50%) rotate(-25deg)'; return; }
+      const period = 60 / bpm; // un tiempo (negra)
+      const swing = 25; // grados
+      let last = performance.now();
+      function step(){
+        if (!isRunning) return;
+        const now = performance.now();
+        const t = (now/1000) % (period*2);
+        const phase = Math.sin(t * Math.PI / period);
+        const deg = swing * phase; // -swing..+swing
+        elArm.style.transform = `translateX(-50%) rotate(${deg}deg)`;
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // ====== UI: acentos ======
+    function rebuildAccentEditor(){
+      elAccentEditor.innerHTML = '';
+      if (!accentPattern.length) accentPattern = Array(beatsPerBar).fill(1);
+      for (let i=0;i<beatsPerBar;i++){
+        const btn = document.createElement('button');
+        btn.className = 'accent';
+        btn.dataset.level = accentPattern[i];
+        btn.textContent = labelForLevel(accentPattern[i]);
+        btn.title = `Tiempo ${i+1}`;
+        btn.addEventListener('click', ()=>{
+          accentPattern[i] = nextLevel(accentPattern[i]);
+          btn.dataset.level = accentPattern[i];
+          btn.textContent = labelForLevel(accentPattern[i]);
+          saveState();
+        });
+        elAccentEditor.appendChild(btn);
+      }
+    }
+    function nextLevel(v){ return v===2? 0 : (v===1? 2 : 1); }
+    function labelForLevel(v){ return v===2? 'A' : (v===1? '•' : '–'); }
+
+    // ====== Eventos UI ======
+    document.getElementById('bpmMinus10').onclick = ()=> updateBpm(bpm-10);
+    document.getElementById('bpmMinus1').onclick  = ()=> updateBpm(bpm-1);
+    document.getElementById('bpmPlus1').onclick   = ()=> updateBpm(bpm+1);
+    document.getElementById('bpmPlus10').onclick  = ()=> updateBpm(bpm+10);
+    elBpmInput.addEventListener('change', e=> updateBpm(e.target.value));
+
+    elBeats.addEventListener('change', e=>{
+      beatsPerBar = Number(e.target.value);
+      accentPattern = Array(beatsPerBar).fill(1);
+      buildLeds(); rebuildAccentEditor(); saveState();
+    });
+
+    elSubdiv.addEventListener('change', e=>{ subdiv = Number(e.target.value); saveState(); });
+
+    elVoice.addEventListener('change', e=>{ voice = e.target.value; saveState(); });
+
+    elVolume.addEventListener('input', e=>{ const v=Number(e.target.value); if (masterGain) masterGain.gain.value = v; saveState(); });
+
+    elStartStop.addEventListener('click', async ()=>{
+      try{
+        if (!audioCtx){ initAudio(); }
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        if (!isRunning) start(); else stop();
+      }catch(e){ alert('No se pudo iniciar el audio. Asegúrate de estar en HTTPS y tocar el botón.\n'+e.message); }
+    });
+
+    elTap.addEventListener('click', ()=>{
+      const now = performance.now();
+      tapTimes.push(now);
+      if (tapTimes.length > 6) tapTimes.shift();
+      if (tapTimes.length >= 2){
+        const intervals = [];
+        for (let i=1;i<tapTimes.length;i++){ intervals.push((tapTimes[i]-tapTimes[i-1])/1000); }
+        const avg = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+        const newBpm = clamp(Math.round(60/avg), 20, 300);
+        updateBpm(newBpm);
+      }
+    });
+
+    function applyStateToUI(){
+      elBpmInput.value = bpm; elBpmDisplay.textContent = bpm;
+      elBeats.value = String(beatsPerBar);
+      elSubdiv.value = String(subdiv);
+      elVoice.value = voice;
+      buildLeds();
+      rebuildAccentEditor();
+    }
+
+    // Init
+    loadState();
+    applyStateToUI();
+
+    // Registrar SW
+    if ('serviceWorker' in navigator){
+      window.addEventListener('load', ()=>{
+        navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW', err));
+      });
+    }
+  </script>
+</body>
+</html>
